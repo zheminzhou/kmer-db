@@ -32,28 +32,36 @@ Authors: Sebastian Deorowicz, Adam Gudys, Maciej Dlugosz, Marek Kokot, Agnieszka
 
 	FILE * in;
 	
-	if ((in = fopen((filename + ".gz").c_str(), "rb")) || 
-		(in = fopen((filename + ".fa.gz").c_str(), "rb")) ||
-		(in = fopen((filename + ".fna.gz").c_str(), "rb")) || 
-		(in = fopen((filename + ".fasta.gz").c_str(), "rb"))) {
-		isGzipped = true;
+	// try to open without adding extension
+	if ((in = fopen(filename.c_str(), "rb"))) {
+		isGzipped = filename.substr(filename.length() - 3) == ".gz";
 	}
 	else {
-		(in = fopen((filename + ".fa").c_str(), "rb")) ||
-		(in = fopen((filename + ".fna").c_str(), "rb")) || 
-		(in = fopen((filename + ".fasta").c_str(), "rb"));
+		// try adding an extension
+		if (
+			(in = fopen((filename + ".gz").c_str(), "rb")) ||
+			(in = fopen((filename + ".fa.gz").c_str(), "rb")) ||
+			(in = fopen((filename + ".fna.gz").c_str(), "rb")) ||
+			(in = fopen((filename + ".fasta.gz").c_str(), "rb"))) {
+			isGzipped = true;
+		}
+		else {
+			(in = fopen((filename + ".fa").c_str(), "rb")) ||
+			(in = fopen((filename + ".fna").c_str(), "rb")) ||
+			(in = fopen((filename + ".fasta").c_str(), "rb"));
+		}
 	}
-	
+
 	if (in) {
 		my_fseek(in, 0, SEEK_END);
 		rawSize = my_ftell(in);
 		my_fseek(in, 0, SEEK_SET);
 
 		rawData = reinterpret_cast<char*>(malloc(rawSize + 1));
-		fread(rawData, rawSize, 1, in);
+		size_t blocksRead = fread(rawData, rawSize, 1, in);
 		rawData[rawSize] = 0; // add null termination 
 		fclose(in);
-		status = true;
+		status = blocksRead;
 	}
 
 	return status;
@@ -99,7 +107,7 @@ bool GenomeInputFile::load(
 		}
 			
 		kmerLength = minhashFilter->getLength();
-		filterValue = minhashFilter->getFilterValue();
+		filterValue = minhashFilter->getFraction();
 	
 		// determine max k-mers count
 		size_t sum_sizes = 0;
@@ -114,7 +122,7 @@ bool GenomeInputFile::load(
 			positionsBuffer.reserve(sum_sizes);
 		}
 
-		for (int i = 0; i < chromosomes.size(); ++i) {
+		for (size_t i = 0; i < chromosomes.size(); ++i) {
 			extractKmers(chromosomes[i], lengths[i], kmerLength, minhashFilter, kmersBuffer, positionsBuffer, storePositions);
 		}
 	
@@ -178,7 +186,7 @@ int GenomeInputFile::loadMultiple(
 		}
 
 		reftask->kmerLength = minhashFilter->getLength();
-		reftask->fraction = minhashFilter->getFilterValue();
+		reftask->fraction = minhashFilter->getFraction();
 
 		// determine max k-mers count
 		size_t sum_sizes = 0;
@@ -194,8 +202,7 @@ int GenomeInputFile::loadMultiple(
 		}
 
 		kmer_t* currentPos = kmersBuffer.data();
-		for (int i = 0; i < chromosomes.size(); ++i) {
-
+		for (size_t i = 0; i < chromosomes.size(); ++i) {
 			auto task = std::make_shared<SampleTask>(*reftask);
 			task->sampleName = headers[i];
 
@@ -210,7 +217,7 @@ int GenomeInputFile::loadMultiple(
 			outputQueue.Push(startingId + i, task);
 			currentPos = it;
 		}
-
+	
 		return chromosomes.size();
 	}
 	
@@ -302,7 +309,7 @@ bool GenomeInputFile::extractSubsequences(
 	char * header = nullptr;
 	char * ptr = data;
 	
-	while (header = strchr(ptr, '>')) { // find begining of header
+	while ((header = strchr(ptr, '>'))) { // find begining of header
 		*header = 0; // put 0 as separator (end of previous chromosome)
 		if (subsequences.size()) {
 			lengths.push_back(header - subsequences.back());
@@ -312,6 +319,9 @@ bool GenomeInputFile::extractSubsequences(
 		headers.push_back(header);
 
 		ptr = strchr(header, '\n'); // find end of header
+		if (*(ptr - 1) == '\r') { // on Windows
+			*(ptr - 1) = 0;
+		}
 		*ptr = 0; // put 0 as separator
 		++ptr; // move to next character (begin of chromosome)
 		subsequences.push_back(ptr); // store chromosome
@@ -321,7 +331,7 @@ bool GenomeInputFile::extractSubsequences(
 
 	// remove newline characters from chromosome
 	totalLen = 0;
-	for (int i = 0; i < subsequences.size(); ++i) {
+	for (size_t i = 0; i < subsequences.size(); ++i) {
 		// determine chromosome end
 		char* newend = std::remove_if(subsequences[i], subsequences[i] + lengths[i], [](char c) -> bool { return c == '\n' || c == '\r';  });
 		*newend = 0;
@@ -478,7 +488,7 @@ bool KmcInputFile::load(
 
 	filterValue = ((double)kmersCount / _total_kmers); // this may differ from theoretical
 	LOG_DEBUG << "Filter passed: " << kmersCount << "/" << _total_kmers << "(" << filterValue << ")" << endl;
-	filterValue = minhashFilter->getFilterValue(); // use proper value
+	filterValue = minhashFilter->getFraction(); // use proper value
 	return kmcfile->Close();
 }
 

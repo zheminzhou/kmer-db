@@ -173,12 +173,8 @@ public:
 		size_t offset = row * (row - 1) / 2;
 		T * ptr = data.data() + offset;
 
-		for (int j = 0; j < row; ++j) {
+		for (size_t j = 0; j < row; ++j) {
 			file << *ptr++ << ',';
-		}
-
-		for (int j = row; j < size; ++j) {
-			file << "0,";
 		}
 	}
 
@@ -186,16 +182,13 @@ public:
 		size_t offset = row * (row - 1) / 2;
 		T * ptr = data.data() + offset;
 
-		for (int j = 0; j < row; ++j) {
+		for (size_t j = 0; j < row; ++j) {
 			file << *ptr++ << ',';
 		}
 
 		file << diagElem << ",";
-		
-		for (int j = row + 1; j < size; ++j) {
-			file << "0,";
-		}
 	}
+
 
 protected:
 	size_t size;
